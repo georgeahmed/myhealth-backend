@@ -1,28 +1,41 @@
-// src/app.ts
+/*************************************************************************
+ *  src/app.ts
+ *  Express application with env-check, logging, CORS, routers, and
+ *  a central error handler.  Import this in src/server.ts and call
+ *  app.listen() there.
+ *************************************************************************/
+
+import 'dotenv-safe/config';               // 1️⃣  env vars must load first
 import express from 'express';
-// @ts-ignore
-import { User } from '../models'; // if you want to show /users route
-import authRouter from './auth.routes';
+
+// ── Middleware ─────────────────────────────────────────────────────────
+import corsMW from './middleware/cors';           // CORS whitelist
+import logger from './middleware/logger';         // pino + trace-id
+import errorHandler from './middleware/errorHandler';
+import ApiError from './utils/ApiError';
+
+// ── Routers ────────────────────────────────────────────────────────────
+import authRouter from './routes/auth';    // /api/auth/*
+import demoRouter from './routes/demo';    // /api/demo/*  (doctor-only demo)
 
 const app = express();
-app.use(express.json());
 
-// Basic route
-app.get('/', (req: any, res: any) => {
-  res.send('Hello from myhealth-backend!');
-});
+/* ---------- Global middlewares ---------- */
+app.use(logger);            // request log & trace-id
+app.use(corsMW);            // CORS (must run before routes)
+app.use(express.json());    // body-parser for JSON
 
-// Auth routes
-app.use('/auth', authRouter);
+/* ---------- Feature routes -------------- */
+app.use('/api/auth', authRouter);
+app.use('/api/demo', demoRouter);
 
-// Example: /users route
-app.get('/users', async (req: any, res: any) => {
-  try {
-    const allUsers = await User.findAll();
-    res.json(allUsers);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
+/* ---------- Root (optional) ------------- */
+app.get('/', (_, res) => res.send('Hello'));
+
+/* ---------- 404 fallback ---------------- */
+app.use((_, __, next) => next(new ApiError(404, 'Not Found')));
+
+/* ---------- Central error handler ------- */
+app.use(errorHandler);
 
 export default app;
